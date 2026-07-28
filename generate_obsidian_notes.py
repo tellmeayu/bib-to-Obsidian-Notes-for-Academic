@@ -949,6 +949,15 @@ def build_folder_link(pdf_paths: Sequence[Path]) -> str:
     return f"[Open Folder]({path_to_file_uri(folder_path)})"
 
 
+def merge_annotation_text(raw_values: Iterable[str]) -> str:
+    parts: List[str] = []
+    for raw_value in raw_values:
+        cleaned = clean_bib_text(raw_value)
+        if cleaned:
+            parts.append(cleaned)
+    return "\n\n".join(parts)
+
+
 def render_markdown(
     *,
     citekey: str,
@@ -964,8 +973,10 @@ def render_markdown(
     summary_status: str,
     summary: str,
     abstract_or_text: str,
+    notes_annotations: str,
 ) -> str:
     keyword_links = format_obsidian_keyword_links(keywords)
+    notes_block = notes_annotations.strip() if notes_annotations.strip() else ""
     return f"""---
 type: paper
 citekey: "{yaml_quote(citekey)}"
@@ -1003,6 +1014,8 @@ summary_status: "{yaml_quote(summary_status)}"
 {keyword_links}
 
 ## Notes/Annotations
+
+{notes_block}
 
 ## Useful excerpts
 
@@ -1168,6 +1181,7 @@ def build_note_content(
     abstract_text = clean_bib_text(entry.get_first("abstract"))
     keywords = split_keywords(entry.get_all("keywords"))
     tags = split_tags(entry)
+    notes_annotations = merge_annotation_text(entry.get_all("annotation"))
     pdf_paths = resolve_pdf_paths(entry, zotero_storage)
     attachment_paths = [str(path) for path in pdf_paths]
     folder_link = build_folder_link(pdf_paths)
@@ -1196,6 +1210,7 @@ def build_note_content(
             summary_status=summary_status,
             summary=summary,
             abstract_or_text=source_text,
+            notes_annotations=notes_annotations,
         )
 
     if pdf_paths:
@@ -1224,6 +1239,7 @@ def build_note_content(
             summary_status=summary_status,
             summary=summary,
             abstract_or_text=f"{extracted_text}\n\n_Extracted from PDF using {backend}._",
+            notes_annotations=notes_annotations,
         )
         return title, attachment_paths, summary_status, note
 
@@ -1241,6 +1257,7 @@ def build_note_content(
         summary_status=SUMMARY_MANUAL_REVIEW,
         summary="TODO: generate one-line summary",
         abstract_or_text="No abstract or PDF-derived source text was available.",
+        notes_annotations=notes_annotations,
     )
     return title, attachment_paths, SUMMARY_MANUAL_REVIEW, note
 
@@ -1297,6 +1314,7 @@ def process_entries(
                 summary_status=SUMMARY_MANUAL_REVIEW,
                 summary="TODO: generate one-line summary",
                 abstract_or_text="Automatic extraction failed. See processing_report.csv and errors.log.",
+                notes_annotations=merge_annotation_text(entry.get_all("annotation")),
             )
             note_created = write_markdown(note_path, minimal_note, overwrite=overwrite)
             results.append(
